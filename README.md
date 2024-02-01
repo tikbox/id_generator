@@ -1,6 +1,6 @@
-# IDGenerator
+# id_generator
 
-UniqueIDGenerator is a high-performance and reliable Go library designed to generate unique IDs with exceptional efficiency. It offers several distinct advantages over traditional ID generation approaches.
+id_generator is a high-performance and reliable Go library designed to generate unique IDs with exceptional efficiency. It offers several distinct advantages over traditional ID generation approaches.
 
 ## Key Features
 
