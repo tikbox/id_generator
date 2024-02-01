@@ -11,33 +11,128 @@ import (
 )
 
 const (
-	IdFile      = "id_list.txt"
-	idMapLength = 3600
+	DefaultCycleDuration = time.Hour
+	DefaultUnitDuration  = time.Second
+	DefaultFilename      = "id_list.txt"
+	DefaultIdCount       = 1_000_000
+	DefaultMinId         = 100_000
+	DefaultMaxId         = 1_000_000
 )
 
-// IdGenerator class
+// IdGenerator class represents a generator for generating unique IDs.
 type IdGenerator struct {
-	ids       []int
-	idMap     map[int64]int
-	usedIdMap map[int]bool
-	filename  string
-	mu        sync.Mutex
+	ids           []int         // Slice of generated IDs
+	idMap         map[int64]int // Map storing corresponding IDs
+	usedIdMap     map[int]bool  // Map tracking used ID
+	filename      string        // Filename for ID storage
+	cycleDuration time.Duration // Duration of each cycle
+	unitDuration  time.Duration // Duration of each unit
+	idMapLength   int           // Length of idMap
+	idCount       int           // Number of IDs to generate
+	minId         int           // Minimum ID value
+	maxId         int           // Maximum ID value
+	mu            sync.Mutex    // Mutex for synchronization
 }
 
-// NewIdGenerator creates a new instance of IdGenerator
-func NewIdGenerator() *IdGenerator {
-	return &IdGenerator{
-		usedIdMap: make(map[int]bool),
-		filename:  IdFile,
+// NewIdGenerator creates a new instance of IdGenerator with optional cycle duration, unit duration, and filename
+func NewIdGenerator(options ...func(*IdGenerator)) *IdGenerator {
+	g := &IdGenerator{
+		usedIdMap:     make(map[int]bool),
+		cycleDuration: DefaultCycleDuration,
+		unitDuration:  DefaultUnitDuration,
+		filename:      DefaultFilename,
+		idCount:       DefaultIdCount,
+		minId:         DefaultMinId,
+		maxId:         DefaultMaxId,
+	}
+
+	for _, option := range options {
+		option(g)
+	}
+
+	g.idMapLength = int(g.cycleDuration / g.unitDuration)
+
+	return g
+}
+
+// WithCycleDuration sets the cycle duration for the IdGenerator
+func WithCycleDuration(duration time.Duration) func(*IdGenerator) {
+	return func(g *IdGenerator) {
+		g.cycleDuration = duration
 	}
 }
 
-// GenerateRandIds generates randomly shuffled 6-digit numeric Ids
-func (g *IdGenerator) GenerateRandIds(count int) {
+// WithUnitDuration sets the unit duration for the IdGenerator
+func WithUnitDuration(duration time.Duration) func(*IdGenerator) {
+	return func(g *IdGenerator) {
+		g.unitDuration = duration
+	}
+}
+
+// WithFilename sets the filename for the IdGenerator
+func WithFilename(filename string) func(*IdGenerator) {
+	return func(g *IdGenerator) {
+		g.filename = filename
+	}
+}
+
+func WithIdRange(minId, maxId int) func(*IdGenerator) {
+	return func(g *IdGenerator) {
+		g.minId = minId
+		g.maxId = maxId
+	}
+}
+
+func WithIdCount(count int) func(*IdGenerator) {
+	return func(g *IdGenerator) {
+		g.idCount = count
+	}
+}
+
+// Initialize loads Ids from file or generates new Ids and saves them to a file
+func (g *IdGenerator) Initialize() error {
+	if fileInfo, err := os.Stat(g.filename); os.IsNotExist(err) || fileInfo.Size() == 0 {
+		// IdFile does not exist, generate new Ids and save them to the file
+		g.GenerateRandIds()
+		return g.SaveIdsToFile()
+	}
+
+	// IdFile exists, load Ids from the file
+	return g.LoadIdsToMap(g.getCycleStartTime(0))
+}
+
+// LoadIdsToMap loads corresponding Ids into the in-memory map
+func (g *IdGenerator) LoadIdsToMap(startTime time.Time) error {
+	g.idMap = make(map[int64]int)
+
+	content, err := os.ReadFile(g.filename)
+	if err != nil {
+		return err
+	}
+
+	idsStr := bytes.Split(content, []byte("\n"))
+
+	startTimeNum := startTime.UnixNano() / int64(g.unitDuration)
+	for i := 0; i < g.idMapLength; i++ {
+		key := startTimeNum + int64(i)
+		g.idMap[key], _ = strconv.Atoi(string(idsStr[i]))
+	}
+
+	return nil
+}
+
+// GenerateRandIds generates randomly shuffled numeric Ids within the specified range
+func (g *IdGenerator) GenerateRandIds() {
+	count := g.idCount
+
+	if g.minId > g.maxId {
+		g.minId, g.maxId = g.maxId, g.minId
+	}
+
 	g.ids = make([]int, count)
 
-	for i := 0; i < count; i++ {
-		g.ids[i] = i + 100000 // Generate 6-digit numeric Id
+	for i := g.minId; i < g.minId+count; i++ {
+		g.ids[i-g.minId] = i
 	}
 
 	rand.Seed(time.Now().UnixNano())
@@ -70,31 +165,12 @@ func (g *IdGenerator) SaveIdsToFile() error {
 	return nil
 }
 
-// LoadIdsToMap loads corresponding Ids into the in-memory map
-func (g *IdGenerator) LoadIdsToMap(startSeconds int64) error {
-	g.idMap = make(map[int64]int)
-
-	content, err := os.ReadFile(g.filename)
-	if err != nil {
-		return err
-	}
-
-	idsStr := bytes.Split(content, []byte("\n"))
-
-	for i := 0; i < idMapLength; i++ {
-		key := startSeconds + int64(i)
-		g.idMap[key], _ = strconv.Atoi(string(idsStr[i]))
-	}
-
-	return nil
-}
-
 // GetId retrieves the Id corresponding to the specified seconds
-func (g *IdGenerator) GetId(seconds int64) int {
+func (g *IdGenerator) GetId(key int64) int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if id, ok := g.idMap[seconds]; ok {
+	if id, ok := g.idMap[key]; ok {
 		if !g.usedIdMap[id] {
 			return id
 		}
@@ -143,14 +219,9 @@ func (g *IdGenerator) SyncIdsToFile() error {
 	return nil
 }
 
-func getStartOfHourSeconds() int64 {
+func (g *IdGenerator) getCycleStartTime(offset int) time.Time {
 	now := time.Now()
-	startOfHour := now.Truncate(time.Hour).Unix()
-	return startOfHour
-}
-
-func getNextHourSeconds() int64 {
-	nextHour := time.Now().Add(time.Hour)
-	nextHour = time.Date(nextHour.Year(), nextHour.Month(), nextHour.Day(), nextHour.Hour(), 0, 0, 0, nextHour.Location())
-	return nextHour.Unix()
+	cycleOffset := time.Duration(offset) * g.cycleDuration
+	startOfCycleTime := now.Truncate(g.cycleDuration).Add(cycleOffset)
+	return startOfCycleTime
 }
