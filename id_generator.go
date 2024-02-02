@@ -98,11 +98,12 @@ func (g *IdGenerator) Initialize() error {
 	}
 
 	// IdFile exists, load Ids from the file
-	return g.LoadIdsToMap(g.getCycleStartTime(0))
+	return g.LoadIds(g.getCycleStartTime(0))
 }
 
-// LoadIdsToMap loads corresponding Ids into the in-memory map
-func (g *IdGenerator) LoadIdsToMap(startTime time.Time) error {
+// LoadIds loads corresponding Ids into the in-memory map
+func (g *IdGenerator) LoadIds(startTime time.Time) error {
+	g.ids = make([]int, 0)
 	g.idMap = make(map[int64]int)
 
 	content, err := os.ReadFile(g.filename)
@@ -115,7 +116,9 @@ func (g *IdGenerator) LoadIdsToMap(startTime time.Time) error {
 	startTimeNum := startTime.UnixNano() / int64(g.unitDuration)
 	for i := 0; i < g.idMapLength; i++ {
 		key := startTimeNum + int64(i)
-		g.idMap[key], _ = strconv.Atoi(string(idsStr[i]))
+		id, _ := strconv.Atoi(string(idsStr[i]))
+		g.idMap[key] = id
+		g.ids = append(g.ids, id)
 	}
 
 	return nil
