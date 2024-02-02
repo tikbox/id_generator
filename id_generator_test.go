@@ -20,9 +20,9 @@ func TestUsageFlow(t *testing.T) {
 		t.Fatalf("Failed to initialize IdGenerator: %v", err)
 	}
 
-	err = generator.LoadIdsToMap(generator.getCycleStartTime(0))
+	err = generator.LoadIds(generator.getCycleStartTime(0))
 	if err != nil {
-		t.Fatalf("Failed to LoadIdsToMap: %v", err)
+		t.Fatalf("Failed to LoadIds: %v", err)
 	}
 
 	// Note: Here is simulating the process of obtaining IDs from the generator.
@@ -46,9 +46,9 @@ func TestUsageFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to sync IDs to file: %v", err)
 	}
-	err = generator.LoadIdsToMap(generator.getCycleStartTime(1))
+	err = generator.LoadIds(generator.getCycleStartTime(1))
 	if err != nil {
-		t.Fatalf("Failed to LoadIdsToMap: %v", err)
+		t.Fatalf("Failed to LoadIds: %v", err)
 	}
 }
 
@@ -86,7 +86,7 @@ func TestInitialize(t *testing.T) {
 	}
 }
 
-func TestLoadIdsToMap(t *testing.T) {
+func TestLoadIds(t *testing.T) {
 	// Create a temporary file to simulate the existence of an ID file
 	file, err := os.CreateTemp("", "id_list.txt")
 	if err != nil {
@@ -107,7 +107,7 @@ func TestLoadIdsToMap(t *testing.T) {
 
 	// Load ID data into the idMap from the file
 	startTime := time.Now()
-	err = generator.LoadIdsToMap(startTime)
+	err = generator.LoadIds(startTime)
 	if err != nil {
 		t.Fatalf("Failed to load ID data to map: %v", err)
 	}
